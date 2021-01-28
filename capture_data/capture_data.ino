@@ -1,14 +1,15 @@
 /*
   IMU Capture
-  This example uses the on-board IMU to start reading acceleration and gyroscope
-  data from on-board IMU and prints it to the Serial Monitor for one second
+  This example uses the on-board IMU to start reading acceleration data 
+  from on-board IMU and prints it to the Serial Monitor for one second
   when the significant motion is detected.
   You can also use the Serial Plotter to graph the data.
+  
   The circuit:
   - Arduino Nano 33 BLE or Arduino Nano 33 BLE Sense board.
-  Created by Don Coleman, Sandeep Mistry
-  Modified by Dominic Pajak, Sandeep Mistry
-  This example code is in the public domain.
+  
+  Edited by Sadie Thomas and Alex Prestwich
+  Reference: Don Coleman and Dominic Pajak, Sandeep Mistry
 */
 
 #include <Arduino_LSM9DS1.h>
