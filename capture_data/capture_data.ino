@@ -14,10 +14,27 @@
 
 #include <Arduino_LSM9DS1.h>
 
+#include <Adafruit_NeoPixel.h>
+#ifdef __AVR__
+#include <avr/power.h> // Required for 16 MHz Adafruit Trinket
+#endif
+
 const float accelerationThreshold = 2.5;      //NEED TO CHANGE THIS
-const int numSamples = 119;                   //NEED TO CHANGE THIS
+const int numSamples = 450;                   //NEED TO CHANGE THIS
 
 int samplesRead = numSamples;
+
+
+//which pin on the Arduino is connected to the NeoPixels
+#define PIN 6
+
+//how many NeoPixels are attached to the Arduino
+#define NUMPIXELS 13
+
+Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
+
+#define DELAYVAL 500        //time (in milliseconds) to pause between pixels
+
 
 void setup() {
   //sets up serial monitor so arduino can send commands through USB connection
@@ -25,7 +42,7 @@ void setup() {
   Serial.begin(9600);
   
   //pauses until you open the serial monitor
-  while (!Serial);
+  //while (!Serial);
 
   //sets up the board
   if (!IMU.begin()) {
@@ -35,11 +52,16 @@ void setup() {
 
   // print the header
   Serial.println("aX,aY,aZ");
+
+  //initilize NeoPixel strip object
+  pixels.begin();
 }
 
 void loop() {
   float aX, aY, aZ;
-
+  
+  pixels.fill(pixels.Color(0, 255, 0), 0);
+  pixels.show();
   // wait for significant motion
   while (samplesRead == numSamples) {
     if (IMU.accelerationAvailable()) {
@@ -57,7 +79,8 @@ void loop() {
       }
     }
   }
-
+  pixels.fill(pixels.Color(255, 0, 0), 0);
+  pixels.show();
   // check if the all the required samples have been read since
   // the last time the significant motion was detected
   while (samplesRead < numSamples) {
@@ -71,14 +94,15 @@ void loop() {
 
       // print the data in CSV format
       Serial.print(aX, 3);
-      Serial.print(',');
+      Serial.print(", ");
       Serial.print(aY, 3);
-      Serial.print(',');
+      Serial.print(", ");
       Serial.print(aZ, 3);
       Serial.println();
 
       if (samplesRead == numSamples) {
         // add an empty line if it's the last sample
+        Serial.println("End");
         Serial.println();
       }
     }
