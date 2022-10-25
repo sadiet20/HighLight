@@ -19,8 +19,8 @@
 #include <avr/power.h> // Required for 16 MHz Adafruit Trinket
 #endif
 
-const float accelerationThreshold = 2.5;      //NEED TO CHANGE THIS
-const int numSamples = 450;                   //NEED TO CHANGE THIS
+const float accelerationThreshold = 1.5;      //NEED TO CHANGE THIS
+const int numSamples = 119;                   //NEED TO CHANGE THIS
 
 int samplesRead = numSamples;
 
@@ -107,4 +107,7 @@ void loop() {
       }
     }
   }
+  pixels.fill(pixels.Color(0, 0, 255), 0);
+  pixels.show();
+  delay(1000);
 }
