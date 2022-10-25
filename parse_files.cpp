@@ -1,3 +1,15 @@
+/*
+ * Author: Sadie Thomas
+ * Date: 5/23/21
+ * Description: parses data and key files, verifies proper formatting, then separates data into two files based on keys
+ * Pre-conditions: data file has x sections of SAMPLES (const defined below) lines, each that have 3 numbers (x acceleratrion, y acceleration and z-acceleration),
+ * 						at the end of each sample is the word "End" to signify the end of that sample
+ * 				   key file has x numbers indicating what the corresponding sample in the data file was (0 = net shot, 1 = rim shot, -1 = garbage)
+ * Post-conditions: the formatting (above) is verified in both files and if it correct, it appends each sample's data to either the net_shot.csv or the rim_shot.csv 
+ * 					file depending on which key (0 or 1) is specified for that sample. If the -1 key is specified, that sample is not written to either file
+ * 					(it is discarded). If one of the files does not have proper formatting the program ends before writing to any files.
+ */
+
 
 #include <iostream>
 #include <fstream>
@@ -5,7 +17,7 @@
 
 using namespace std;
 
-#define SAMPLES 450
+#define SAMPLES 450   //may change this 
 
 bool open_file(ifstream&, string);
 bool verify_files(ifstream&, ifstream&);

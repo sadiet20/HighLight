@@ -1,3 +1,14 @@
+/*
+ * Author: Sadie Thomas
+ * Date: 4/29/21
+ * Description: allows user record how many net/rim shots are detected correctly/incorrectly
+ * Inputs: user enters keys to signify correct net shots, wrong net shots (should have been net but detected as rim),
+ * 		   correct rim shots, wrong rim shots (should have been rim but detected as net), and questionable shots (cannot 
+ * 		   determine if correct)
+ * Pre-conditions: None
+ * Post-conditions: the totals for each category and percentages of accurracy is appended to "accuracy.txt" along with the current date and time
+ */
+
 
 #include <iostream>
 #include <fstream>
