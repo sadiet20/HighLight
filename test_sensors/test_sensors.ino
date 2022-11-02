@@ -29,9 +29,6 @@ sensors_event_t event;
 Adafruit_ADXL343 accel = Adafruit_ADXL343(12345);
 
 unsigned int id_num = 0;
-unsigned long int time_start = 0;
-unsigned long int time_end = 0;
-float avg_time = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -55,8 +52,6 @@ void loop() {
   //wait for vibration
   while(analogRead(PIEZO_PINRD1) < 1);
 
-  time_start = millis();
-
   //get 500 readings
   //each data point is read in 1.38 ms
   for(int i=0; i<SAMPLE_SIZE; i++) {
@@ -69,8 +64,6 @@ void loop() {
     //PiezoLite = analogRead(PIEZO_PINLITE);
   }
 
-  time_end = millis();
-
   file_print_all();
   //plot_print_all();
   
@@ -78,10 +71,6 @@ void loop() {
   Serial.print("#");
   Serial.println(id_num);
   id_num++;
-
-  avg_time = (float)(time_end - time_start)/SAMPLE_SIZE;
-  Serial.print("Average time per reading (ms): ");
-  Serial.println(avg_time);
 }
 
 
