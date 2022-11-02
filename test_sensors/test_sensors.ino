@@ -12,20 +12,26 @@
 #define PIEZO_PINLG A2
 #define PIEZO_PINLITE A4
 
+//number of datapoints in one sample
+#define SAMPLE_SIZE 500
+
 //readings from sensors
 //float micro = 0;
-int PiezoRd1 = 0;
-int PiezoRd2 = 0;
-int PiezoSm = 0;
-int PiezoLg = 0;
-int PiezoLite = 0;
-float RMS = 0;
+int PiezoRd1[SAMPLE_SIZE];
+int PiezoRd2[SAMPLE_SIZE];
+//int PiezoSm = 0;
+//int PiezoLg = 0;
+//int PiezoLite = 0;
+float RMS[SAMPLE_SIZE];
 sensors_event_t event;
 
 //create accelerometer object with unique ID
 Adafruit_ADXL343 accel = Adafruit_ADXL343(12345);
 
 unsigned int id_num = 0;
+unsigned long int time_start = 0;
+unsigned long int time_end = 0;
+float avg_time = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -44,68 +50,82 @@ void setup() {
   Serial.println("PiezoRdRim,PiezoRdLeg,RMS");
 }
 
+
 void loop() {
   //wait for vibration
   while(analogRead(PIEZO_PINRD1) < 1);
 
-  //get 500 readings
-  for(int i=0; i<500; i++) {
-    PiezoRd1 = analogRead(PIEZO_PINRD1);
-    PiezoRd2 = analogRead(PIEZO_PINRD2);
-    accel.getEvent(&event);
-    RMS = sqrt((sq(event.acceleration.x) + sq(event.acceleration.y) + sq(event.acceleration.z))/3);
-    PiezoSm = analogRead(PIEZO_PINSM);
-    PiezoLg = analogRead(PIEZO_PINLG);
-    PiezoLite = analogRead(PIEZO_PINLITE);
+  time_start = millis();
 
-    plot_print_all();
+  //get 500 readings
+  //each data point is read in 1.38 ms
+  for(int i=0; i<SAMPLE_SIZE; i++) {
+    PiezoRd1[i] = analogRead(PIEZO_PINRD1);
+    PiezoRd2[i] = analogRead(PIEZO_PINRD2);
+    accel.getEvent(&event);
+    RMS[i] = sqrt((sq(event.acceleration.x) + sq(event.acceleration.y) + sq(event.acceleration.z))/3);
+    //PiezoSm = analogRead(PIEZO_PINSM);
+    //PiezoLg = analogRead(PIEZO_PINLG);
+    //PiezoLite = analogRead(PIEZO_PINLITE);
   }
 
+  time_end = millis();
+
+  file_print_all();
+  //plot_print_all();
+  
   //print unique identifier after each shot
   Serial.print("#");
   Serial.println(id_num);
   id_num++;
 
+  avg_time = (float)(time_end - time_start)/SAMPLE_SIZE;
+  Serial.print("Average time per reading (ms): ");
+  Serial.println(avg_time);
 }
+
 
 void plot_print_all(){
-  Serial.print("PiezoRd1Rim:");   
-  Serial.print(PiezoRd1);
-  Serial.print(",");
-  Serial.print("PiezoRd2Leg:");
-  Serial.print(PiezoRd2);
-  Serial.print(",");
-  Serial.print("RMS:");
-  Serial.println(RMS);
-
-  /*
-  Serial.print(",");
-  Serial.print("PiezoSm:");   
-  Serial.print(PiezoSm);
-  Serial.print(",");
-  Serial.print("PiezoLg:");   
-  Serial.print(PiezoLg);
-  Serial.print(",");
-  Serial.print("PiezoLite:");   
-  Serial.println(PiezoLite);
-  */
+  for(int i=0; i<SAMPLE_SIZE; i++){
+    Serial.print("PiezoRd1Rim:");   
+    Serial.print(PiezoRd1[i]);
+    Serial.print(",");
+    Serial.print("PiezoRd2Leg:");
+    Serial.print(PiezoRd2[i]);
+    Serial.print(",");
+    Serial.print("RMS:");
+    Serial.println(RMS[i]);
+  
+    /*
+    Serial.print(",");
+    Serial.print("PiezoSm:");   
+    Serial.print(PiezoSm);
+    Serial.print(",");
+    Serial.print("PiezoLg:");   
+    Serial.print(PiezoLg);
+    Serial.print(",");
+    Serial.print("PiezoLite:");   
+    Serial.println(PiezoLite);
+    */
+  }
 }
 
-void file_print_all(){
-  Serial.print(millis());
-  Serial.print(",");
-  Serial.print(PiezoRd1);
-  Serial.print(",");
-  Serial.print(PiezoRd2);
-  Serial.print(",");
-  Serial.println(RMS);
 
-  /*
-  Serial.print(",");
-  Serial.print(PiezoSm);
-  Serial.print(",");  
-  Serial.print(PiezoLg);
-  Serial.print(",");  
-  Serial.println(PiezoLite);
- */
+void file_print_all(){
+  for(int i=0; i<SAMPLE_SIZE; i++){
+    Serial.print(PiezoRd1[i]);
+    Serial.print(",");
+    Serial.print(PiezoRd2[i]);
+    Serial.print(",");
+    Serial.println(RMS[i]);
+  
+    /*
+    Serial.print(",");
+    Serial.print(PiezoSm);
+    Serial.print(",");  
+    Serial.print(PiezoLg);
+    Serial.print(",");  
+    Serial.println(PiezoLite);
+   */
+  }
 }
