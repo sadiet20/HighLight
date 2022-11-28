@@ -1,3 +1,15 @@
+/***********************************************************
+ * Author: Sadie Thomas
+ * Description: Tests analog inputs for potentiometer and 
+ *    piezo sensor. 
+ * Inputs: Analog potentiometer or piezo
+ * Outputs: Serial prints
+ * References: Encoder code - Curious Scientist
+ * Components: Rasberry Pi Pico, 10K ohm potentiometer, 
+ *    round piezo sensor
+ * Date: 11/28/2022
+ ***********************************************************/
+
 
 #define PIN 26
 

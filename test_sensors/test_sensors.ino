@@ -1,4 +1,11 @@
-
+/***********************************************************
+ * Author: Sadie Thomas
+ * Description: Tests analog input sensors for comparison
+ * Inputs: piezo sensors, accelerometer
+ * Outputs: Serial prints
+ * Components: Arduino Mega, accelerometer, piezo sensors
+ * Date: 11/28/2022
+ ***********************************************************/
 
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
