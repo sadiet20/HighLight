@@ -12,15 +12,21 @@
 #include <iostream>
 #include <fstream>
 #include <stdexcept>
+#include <vector>
 
 using namespace std;
 
-#define SAMPLE_SIZE  120    //may change this 
+#define SAMPLE_SIZE 120    //may change this 
+#define RMS_IDX     0
+#define PIEZO_IDX   1
 
 bool open_file(ifstream&, string);
 int verify_keys_file(ifstream&);
 int verify_data_file(ifstream&);
-//void write_to_file(ifstream&, ofstream&);
+void write_to_file(ofstream&, vector< vector<float> >&);
+void get_keys(ifstream&, vector<char>&);
+void print_vector(vector<char>);
+int get_sample(ifstream&, vector< vector<float> >&);
 
 
 int main(int argc, char** argv){
@@ -28,7 +34,8 @@ int main(int argc, char** argv){
 	ifstream fin_keys;
 	string data_name;
 	string keys_name;
-	int num_files = 1;
+    string line;	
+    int num_files = 1;
 
 	//get file names from command line or user input
 	if(argc == 3){
@@ -80,6 +87,48 @@ int main(int argc, char** argv){
 		if(!open_file(fin_data, data_name) || !open_file(fin_keys, keys_name)){
 			continue;
 		}
+        
+        //read two header lines
+        getline(fin_data, line);
+        getline(fin_data, line);
+
+        vector<char> keys(num_samples, 'x');
+        vector< vector<float> > sample(SAMPLE_SIZE, vector<float>(2, 0));
+		int id;
+
+		//open output files to append
+		ofstream fout_net;
+		ofstream fout_rim;
+		fout_net.open("net_shot.csv", ios::out | ios::app);
+		fout_rim.open("rim_shot.csv", ios::out | ios::app);
+        
+        get_keys(fin_keys, keys);
+        cout << "Keys: ";
+        print_vector(keys);
+
+        for(int s=0; s<num_samples; s++){
+            id = get_sample(fin_data, sample);
+            if(keys[id] == 'n' || keys[id] == 'p'){
+                cout << "Writing to net file" << endl;
+                write_to_file(fout_net, sample);
+            }
+            else if(keys[id] == 'r'){
+                cout << "Writing to rim file" << endl;
+                write_to_file(fout_rim, sample);
+            }
+            else{
+                cout << "Trashing sample" << endl;
+            }
+        }
+	
+		cout << "\nDone writing output" << endl;
+	
+		//close file streams
+		fin_data.close();
+		fin_keys.close();
+		fout_net.close();
+		fout_rim.close();
+
     }
 
     return 0;
@@ -203,6 +252,79 @@ int verify_data_file(ifstream& fin_data){
     }
 
     return i;
+}
+
+
+//reads the keys from the key file and stores them into a vector
+//each index corresponds to a sample id number
+void get_keys(ifstream& fin_keys, vector<char>& keys){
+    string line;
+    size_t space_idx;
+    int num;
+
+    while(getline(fin_keys, line)){
+        if(line[0] == '\n'){
+            break;
+        }   
+
+        //look for space after the number (ignore '#')
+        space_idx = line.find(' ', 1);
+
+        //grab the number, ignoring the '#', before the space
+        num = stoi(line.substr(1, space_idx-1));
+
+        //store the key for that sample number
+        keys[num] = line[space_idx+1];
+    }
+
+    return;
+}
+
+
+//print contents of char vector
+void print_vector(vector<char> v){
+    for(int i=0; i<v.size(); i++){
+        cout << v[i] << ", ";
+    }
+    cout << endl;
+}
+
+
+//read sample from data file and store into 2d vector
+//stores both rms and piezo data into vector
+//returns id number of sample
+int get_sample(ifstream& fin_data, vector< vector<float> >& sample){
+    string line;
+    int idx;
+
+    //loop through each line in the sample
+    for(int i=0; i<SAMPLE_SIZE; i++){
+        //get line from file
+        getline(fin_data, line);
+
+        //find comma between numbers
+        idx = line.find(',');
+
+        //grab the numbers before and after the comma and convert to floats
+        sample[i][RMS_IDX] = stof(line.substr(0, idx));
+        sample[i][PIEZO_IDX] = stof(line.substr(idx+1));
+    }
+
+    //get line with id number
+    getline(fin_data, line);
+
+    //return the id number, ignoring the '#'
+    return stoi(line.substr(1));
+}
+
+
+//write sample to given file
+//writes both rms and piezo data in csv format
+void write_to_file(ofstream& fout, vector< vector<float> >& sample){
+    for(int i=0; i<SAMPLE_SIZE; i++){
+        fout << sample[i][RMS_IDX] << "," << sample[i][PIEZO_IDX] << endl;    
+    }
+    fout << endl;
 }
 
 
