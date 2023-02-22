@@ -40,7 +40,7 @@ static const uint8_t DEVID          = 0xE5;
 static const uint8_t HZ_400         = 0x0C;         // 1100 in binary (from datasheet)
 static const uint8_t HZ_800         = 0x0D;         // 1101 in binary (from datasheet)
 static const uint8_t G_4            = 0x01;         // +/- 4g code (from datasheet)
-static const uint8_t G_8            = 0x10;         // +/- 4g code (from datasheet)
+static const uint8_t G_8            = 0x10;         // +/- 8g code (from datasheet)
 static const float SENSITIVITY_2G   = 1.0 / 256;    // (g/LSB)
 static const float SENSITIVITY_4G   = 1.0 / 128;    // (g/LSB)
 static const float SENSITIVITY_8G   = 1.0 / 64;     // (g/LSB)
@@ -217,7 +217,6 @@ void accel_init(){
     // Test: read Data Format register back to make sure data rate changed
     reg_read(CS_PIN, REG_DATA_FORMAT, data, 1);
     printf("Updated Data Format Register: 0x%X\r\n", data[0]);
-
 }
 
 
@@ -290,7 +289,6 @@ void get_rms(float* rms){
 
     // Compute RMS acceleration
     *rms = sqrt(((x_ms)*(x_ms) + (y_ms)*(y_ms) + (z_ms)*(z_ms))/3);  //adjusted RMS based on m/s^2
-
 }
 
 
@@ -306,7 +304,7 @@ void print_continuous(){
         // read analog value from piezo
         piezo = adc_read();
 
-        //get x, y, z, and rms acceleration
+        //get rms acceleration
         get_rms(&rms);
 
         //printf("%.2f,%d\n", rms, piezo);
@@ -341,7 +339,7 @@ void print_max_every_5(){
             max_piezo = piezo;
         }
 
-        //get x, y, z, and rms acceleration
+        //get rms acceleration
         get_rms(&rms);
         if(rms > max_rms){
             max_rms = rms;
@@ -367,7 +365,7 @@ void sample_above_threshold(){
         // read analog value from piezo
         piezo = adc_read();
 
-        //get x, y, z, and rms acceleration
+        //get rms acceleration
         get_rms(&rms);
 
         if(rms >= RMS_SENSITIVITY){
@@ -379,7 +377,7 @@ void sample_above_threshold(){
                 // read analog value from piezo
                 piezo = adc_read();
 
-                //get x, y, z, and rms acceleration
+                //get rms acceleration
                 get_rms(&rms);
 
                 //printf("%.2f,%d\n", rms, piezo);
@@ -409,7 +407,7 @@ void sample_above_thresh_with_settle(){
         // read analog value from piezo
         piezo = adc_read();
 
-        //get x, y, z, and rms acceleration
+        //get rms acceleration
         get_rms(&rms);
 
         if(rms >= RMS_SENSITIVITY){
@@ -421,7 +419,7 @@ void sample_above_thresh_with_settle(){
                 // read analog value from piezo
                 piezo = adc_read();
 
-                //get x, y, z, and rms acceleration
+                //get rms acceleration
                 get_rms(&rms);
 
                 //printf("%.2f,%d\n", rms, piezo);
@@ -460,7 +458,7 @@ void wait_for_settle(){
 
     //fill array with data
     for(int i=0; i<COMPARISON_SIZE-1; i++){ 
-        //get x, y, z, and rms acceleration
+        //get rms acceleration
         get_rms(&(rms_arr[i]));
 
         //delay for ADC to work properly
@@ -468,7 +466,7 @@ void wait_for_settle(){
     }
 
     while(1){
-        //get x, y, z, and rms acceleration
+        //get rms acceleration
         get_rms(&(rms_arr[idx]));
 
         //delay for ADC to work properly
@@ -517,7 +515,7 @@ void sample_at_movement_with_settle(){
             // read analog value from piezo
             piezo = adc_read();
 
-            //get x, y, z, and rms acceleration
+            //get rms acceleration
             get_rms(&rms);
 
             //printf("%.2f,%d\n", rms, piezo);
@@ -550,7 +548,7 @@ void wait_for_movement(){
 
     //fill array with data
     for(int i=0; i<COMPARISON_SIZE-1; i++){ 
-        //get x, y, z, and rms acceleration
+        //get rms acceleration
         get_rms(&(rms_arr[i]));
 
         //delay for ADC to work properly
@@ -558,7 +556,7 @@ void wait_for_movement(){
     }
 
     while(1){
-        //get x, y, z, and rms acceleration
+        //get rms acceleration
         get_rms(&(rms_arr[idx]));
 
         //delay for ADC to work properly
@@ -586,5 +584,4 @@ void wait_for_movement(){
         //update index in array
         idx = (idx + 1) % COMPARISON_SIZE;
     }
-
 }
