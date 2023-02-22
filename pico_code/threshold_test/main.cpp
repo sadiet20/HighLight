@@ -29,17 +29,21 @@
 spi_inst_t* spi = spi0; 
 
 // Registers
-static const uint8_t REG_DEVID      = 0x00;
-static const uint8_t REG_POWER_CTL  = 0x2D;
-static const uint8_t REG_DATAX0     = 0x32;
-static const uint8_t REG_BW_RATE    = 0x2C;
+static const uint8_t REG_DEVID          = 0x00;
+static const uint8_t REG_POWER_CTL      = 0x2D;
+static const uint8_t REG_DATAX0         = 0x32;
+static const uint8_t REG_BW_RATE        = 0x2C;
+static const uint8_t REG_DATA_FORMAT    = 0x31;
 
 // Other constants
 static const uint8_t DEVID          = 0xE5;
-static const uint8_t HZ_400         = 0x0C;          // 1100 in binary (from datasheet)
-static const uint8_t HZ_800         = 0x0D;          // 1101 in binary (from datasheet)
+static const uint8_t HZ_400         = 0x0C;         // 1100 in binary (from datasheet)
+static const uint8_t HZ_800         = 0x0D;         // 1101 in binary (from datasheet)
+static const uint8_t G_4            = 0x01;         // +/- 4g code (from datasheet)
+static const uint8_t G_8            = 0x10;         // +/- 4g code (from datasheet)
 static const float SENSITIVITY_2G   = 1.0 / 256;    // (g/LSB)
 static const float SENSITIVITY_4G   = 1.0 / 128;    // (g/LSB)
+static const float SENSITIVITY_8G   = 1.0 / 64;     // (g/LSB)
 static const float EARTH_GRAVITY    = 9.80665;      // Earth's gravity in [m/s^2]
 static const float RMS_SENSITIVITY  = 7;            // sensitivity level for significant movement
 #define ADC_DELAY 1
@@ -97,7 +101,7 @@ int main() {
     // wait for serial connection
     // while (!tud_cdc_connected()){
     //     sleep_ms(100);
-    // } 
+    // }
 
     // Initialize acceleromter
     accel_init();
@@ -128,9 +132,9 @@ int main() {
         
         //sample_above_threshold();
 
-        sample_above_thresh_with_settle();
+        //sample_above_thresh_with_settle();
         
-        //sample_at_movement_with_settle();
+        sample_at_movement_with_settle();
     }
 }
 
@@ -178,7 +182,7 @@ void accel_init(){
         }
     }
     
-    // Read Power Control register
+    //--- Read Power Control register ---
     reg_read(CS_PIN, REG_POWER_CTL, data, 1);
     printf("Power control register: 0x%X\r\n", data[0]);
 
@@ -190,7 +194,7 @@ void accel_init(){
     reg_read(CS_PIN, REG_POWER_CTL, data, 1);
     printf("Updated Power control register: 0x%X\r\n", data[0]);
 
-    // Read Bandwidth Rate register
+    //--- Read Bandwidth Rate register ---
     reg_read(CS_PIN, REG_BW_RATE, data, 1);
     printf("BW Rate Register: 0x%X\r\n", data[0]);
 
@@ -201,6 +205,18 @@ void accel_init(){
     // Test: read Bandwidth Rate register back to make sure data rate changed
     reg_read(CS_PIN, REG_BW_RATE, data, 1);
     printf("Updated BW Rate Register: 0x%X\r\n", data[0]);
+
+    //--- Read Data Format register ---
+    reg_read(CS_PIN, REG_DATA_FORMAT, data, 1);
+    printf("Data Format Register: 0x%X\r\n", data[0]);
+
+    // Change data format to +/- 4g
+    data[0] = G_4;
+    reg_write(CS_PIN, REG_DATA_FORMAT, data[0]);
+
+    // Test: read Data Format register back to make sure data rate changed
+    reg_read(CS_PIN, REG_DATA_FORMAT, data, 1);
+    printf("Updated Data Format Register: 0x%X\r\n", data[0]);
 
 }
 
@@ -268,9 +284,9 @@ void get_rms(float* rms){
     acc_z = (int16_t)((data[5] << 8) | data[4]);
 
     // Convert measurements to [m/s^2]
-    x_ms = acc_x * SENSITIVITY_2G * EARTH_GRAVITY;
-    y_ms = acc_y * SENSITIVITY_2G * EARTH_GRAVITY;
-    z_ms = acc_z * SENSITIVITY_2G * EARTH_GRAVITY;
+    x_ms = acc_x * SENSITIVITY_4G * EARTH_GRAVITY;
+    y_ms = acc_y * SENSITIVITY_4G * EARTH_GRAVITY;
+    z_ms = acc_z * SENSITIVITY_4G * EARTH_GRAVITY;
 
     // Compute RMS acceleration
     *rms = sqrt(((x_ms)*(x_ms) + (y_ms)*(y_ms) + (z_ms)*(z_ms))/3);  //adjusted RMS based on m/s^2
@@ -305,6 +321,7 @@ void print_continuous(){
 void print_max_every_5(){
     float rms;
     float max_rms = -100;
+    float min_rms = 100;
     int piezo;
     int max_piezo = -100;
     uint32_t start_time = time_us_32();
@@ -329,13 +346,16 @@ void print_max_every_5(){
         if(rms > max_rms){
             max_rms = rms;
         }
+        if(rms < min_rms){
+            min_rms = rms;
+        }
         
         //delay for ADC to work properly
         sleep_ms(ADC_DELAY);
     }
 
     //printf("%.2f,%d\n", max_rms, max_piezo);
-    printf("%.2f\n", max_rms);
+    printf("Max: %.2f, Min: %.2f, Diff: %.2f\n", max_rms, min_rms, max_rms-min_rms);
 }
 
 
@@ -425,12 +445,12 @@ void sample_above_thresh_with_settle(){
 
 
 void wait_for_settle(){
-    const int COMPARISON_SIZE = 50;
+    const int COMPARISON_SIZE = 100;
     float rms_arr[COMPARISON_SIZE];
     int idx = COMPARISON_SIZE - 1;
     float min_rms;
     float max_rms;
-    const float MOVEMENT_THRESHOLD = 2;
+    const float MOVEMENT_THRESHOLD = 1.5;
     uint32_t start_time = time_us_32();
     uint32_t time_to_settle;
     
@@ -521,12 +541,12 @@ void sample_at_movement_with_settle(){
 
 
 void wait_for_movement(){
-    const int COMPARISON_SIZE = 50;
+    const int COMPARISON_SIZE = 5;
     float rms_arr[COMPARISON_SIZE];
     int idx = COMPARISON_SIZE - 1;
     float min_rms;
     float max_rms;
-    const float MOVEMENT_THRESHOLD = 2;
+    const float MOVEMENT_THRESHOLD = 3;
 
     //fill array with data
     for(int i=0; i<COMPARISON_SIZE-1; i++){ 
