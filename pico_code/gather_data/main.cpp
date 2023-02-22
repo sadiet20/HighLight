@@ -6,6 +6,14 @@
 #include "pico/stdlib.h"
 #include "hardware/spi.h"
 #include "hardware/adc.h"
+#include <tusb.h>
+#include "Adafruit_NeoPixel.hpp"
+
+/*
+ * Variables
+ */
+
+#define SAMPLE_SIZE 350
 
 /*
  * Accelerometer variables
@@ -30,12 +38,26 @@ static const uint8_t DEVID          = 0xE5;
 static const float SENSITIVITY_2G   = 1.0 / 256;    // (g/LSB)
 static const float SENSITIVITY_4G   = 1.0 / 128;    // (g/LSB)
 static const float EARTH_GRAVITY    = 9.80665;      // Earth's gravity in [m/s^2]
+static const float RMS_SENSITIVITY  = 7;          // sensitivity level for significant movement
 
 /*
  * Piezo variables
  */
 
 #define PIEZO_PIN 26
+
+/*
+ * Neopixel variables
+ */
+
+#define LED_PIN     21
+#define NUM_PIXELS  16
+#define BRIGHT      20
+
+Adafruit_NeoPixel pixels(NUM_PIXELS, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+static const uint32_t WHITE = pixels.Color(BRIGHT, BRIGHT, BRIGHT);
+static const uint32_t RED = pixels.Color(BRIGHT, 0, 0);
 
 
 /*
@@ -57,6 +79,9 @@ int main() {
     float acc_z;
     float rms;
     uint16_t piezo;
+    float rms_arr[SAMPLE_SIZE];
+    uint16_t piezo_arr[SAMPLE_SIZE];
+    uint16_t id = 0;
 
     // Initialize chosen serial port
     stdio_init_all();
@@ -73,9 +98,18 @@ int main() {
     adc_gpio_init(PIEZO_PIN);   // mark pin for analog instead of digital use
     adc_select_input(0);        // select which ADC pin to read from (0..3 are GPIOs 26..29)
 
-    // Wait before taking measurements
-    sleep_ms(2000);
+    // initialize NeoPixel strip
+    pixels.begin();
+    pixels.fill(WHITE);
+    pixels.show();
+    pixels.fill(WHITE);         //fill and show twice, otherwise not all pixels are white
+    pixels.show();
 
+    // wait for serial connection
+    //while (!tud_cdc_connected()) {sleep_ms(100);} 
+
+    printf("RMS,piezo\n");
+    
     // Loop forever
     while (true) {
         // read analog value from piezo
@@ -84,12 +118,35 @@ int main() {
         //get x, y, z, and rms acceleration
         get_xyz_rms(&acc_x, &acc_y, &acc_z, &rms);
         
-        if(rms >= 6){
-            printf("RMS: %.2f | Piezo: %d \r\n", rms, piezo);
-            gpio_put(25, 1); // Set pin 25 to high (on)
-        }
-        else{
-            gpio_put(25, 0); // Set pin 25 to low (off)
+        if(rms >= RMS_SENSITIVITY){
+            //turn on lights to inidicate reading data
+            gpio_put(25, 1); // Set onboard LED to high (on)
+            pixels.fill(RED);
+            pixels.show();
+
+            //store samples into arrays
+            for(int i=0; i<SAMPLE_SIZE; i++){
+                // read analog value from piezo
+                piezo_arr[i] = adc_read();
+
+                //get x, y, z, and rms acceleration
+                get_xyz_rms(&acc_x, &acc_y, &acc_z, &rms_arr[i]);
+
+                //delay for ADC to work properly
+                sleep_ms(1);
+            }
+
+            //print samples to screen
+            for(int i=0; i<SAMPLE_SIZE; i++){
+                //printf("%.2f,%d\n", rms_arr[i], piezo_arr[i]);
+                printf("%.2f\n", rms_arr[i]);
+            }
+            printf("#%d\n", id++);
+
+            //turn off lights to indicate done reading data
+            gpio_put(25, 0); // Set onboard LED to low (off)
+            pixels.fill(WHITE);
+            pixels.show();
         }
         
         // Print results
@@ -118,10 +175,10 @@ void accel_init(){
     spi_init(spi, 1000 * 1000);
 
     // Set SPI format
-    spi_set_format( spi0,   // SPI instance
-                    8,      // Number of bits per transfer
-                    1,      // Polarity (CPOL)
-                    1,      // Phase (CPHA)
+    spi_set_format( spi0,       // SPI instance
+                    8,          // Number of bits per transfer
+                    SPI_CPOL_1, // Polarity (CPOL)
+                    SPI_CPHA_1, // Phase (CPHA)
                     SPI_MSB_FIRST);
 
     // Initialize SPI pins
