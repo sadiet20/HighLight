@@ -32,13 +32,17 @@ spi_inst_t* spi = spi0;
 static const uint8_t REG_DEVID      = 0x00;
 static const uint8_t REG_POWER_CTL  = 0x2D;
 static const uint8_t REG_DATAX0     = 0x32;
+static const uint8_t REG_BW_RATE    = 0x2C;
 
 // Other constants
 static const uint8_t DEVID          = 0xE5;
+static const uint8_t HZ_400         = 0x0C;          // 1100 in binary (from datasheet)
+static const uint8_t HZ_800         = 0x0D;          // 1101 in binary (from datasheet)
 static const float SENSITIVITY_2G   = 1.0 / 256;    // (g/LSB)
 static const float SENSITIVITY_4G   = 1.0 / 128;    // (g/LSB)
 static const float EARTH_GRAVITY    = 9.80665;      // Earth's gravity in [m/s^2]
-static const float RMS_SENSITIVITY  = 7;          // sensitivity level for significant movement
+static const float RMS_SENSITIVITY  = 7;            // sensitivity level for significant movement
+#define ADC_DELAY 1
 
 /*
  * Piezo variables
@@ -68,12 +72,14 @@ static const uint32_t YELLOW = pixels.Color(BRIGHT, BRIGHT, 0);
 void accel_init();
 void reg_write(const uint cs, const uint8_t reg, const uint8_t data);
 int reg_read(const uint cs, const uint8_t reg, uint8_t *buf, uint8_t nbytes);
-void get_xyz_rms(float* x_ms, float* y_ms, float* z_ms, float* rms);
+void get_rms(float* rms);
 void print_continuous();
 void print_max_every_5();
-void print_above_threshold();
-void print_sig_diff();
-void wait_for_silence();
+void sample_above_threshold();
+void sample_above_thresh_with_settle();
+void wait_for_settle();
+void sample_at_movement_with_settle();
+void wait_for_movement();
 
 
 /*
@@ -89,9 +95,9 @@ int main() {
     stdio_init_all();
 
     // wait for serial connection
-    while (!tud_cdc_connected()){
-        sleep_ms(100);
-    } 
+    // while (!tud_cdc_connected()){
+    //     sleep_ms(100);
+    // } 
 
     // Initialize acceleromter
     accel_init();
@@ -120,9 +126,11 @@ int main() {
 
         //print_max_every_5();
         
-        //print_above_threshold();
+        //sample_above_threshold();
 
-        print_sig_diff();
+        sample_above_thresh_with_settle();
+        
+        //sample_at_movement_with_settle();
     }
 }
 
@@ -144,7 +152,7 @@ void accel_init(){
 
     // Initialize SPI port at 1 MHz
     baud_rate = spi_init(spi, 1000 * 1000);
-    printf("baud rate: %u\n", baud_rate);
+    printf("Baud rate: %u\n", baud_rate);
 
     // Set SPI format
     spi_set_format( spi0,       // SPI instance
@@ -172,7 +180,7 @@ void accel_init(){
     
     // Read Power Control register
     reg_read(CS_PIN, REG_POWER_CTL, data, 1);
-    printf("0x%X\r\n", data[0]);
+    printf("Power control register: 0x%X\r\n", data[0]);
 
     // Tell ADXL343 to start taking measurements by setting Measure bit to high
     data[0] |= (1 << 3);
@@ -180,7 +188,20 @@ void accel_init(){
 
     // Test: read Power Control register back to make sure Measure bit was set
     reg_read(CS_PIN, REG_POWER_CTL, data, 1);
-    printf("0x%X\r\n", data[0]);
+    printf("Updated Power control register: 0x%X\r\n", data[0]);
+
+    // Read Bandwidth Rate register
+    reg_read(CS_PIN, REG_BW_RATE, data, 1);
+    printf("BW Rate Register: 0x%X\r\n", data[0]);
+
+    // Change output data rate to 800Hz
+    data[0] = HZ_800;
+    reg_write(CS_PIN, REG_BW_RATE, data[0]);
+
+    // Test: read Bandwidth Rate register back to make sure data rate changed
+    reg_read(CS_PIN, REG_BW_RATE, data, 1);
+    printf("Updated BW Rate Register: 0x%X\r\n", data[0]);
+
 }
 
 
@@ -228,11 +249,14 @@ int reg_read(const uint cs, const uint8_t reg, uint8_t *buf, const uint8_t nbyte
 }
 
 
-//get acceleration for x, y, z, and RMS 
-void get_xyz_rms(float* x_ms, float* y_ms, float* z_ms, float* rms){
+//get RMS acceleration
+void get_rms(float* rms){
     int16_t acc_x;
     int16_t acc_y;
     int16_t acc_z;
+    float x_ms;
+    float y_ms;
+    float z_ms;
     uint8_t data[6];
 
     // Read X, Y, and Z values from registers (16 bits each)
@@ -244,20 +268,17 @@ void get_xyz_rms(float* x_ms, float* y_ms, float* z_ms, float* rms){
     acc_z = (int16_t)((data[5] << 8) | data[4]);
 
     // Convert measurements to [m/s^2]
-    *x_ms = acc_x * SENSITIVITY_2G * EARTH_GRAVITY;
-    *y_ms = acc_y * SENSITIVITY_2G * EARTH_GRAVITY;
-    *z_ms = acc_z * SENSITIVITY_2G * EARTH_GRAVITY;
+    x_ms = acc_x * SENSITIVITY_2G * EARTH_GRAVITY;
+    y_ms = acc_y * SENSITIVITY_2G * EARTH_GRAVITY;
+    z_ms = acc_z * SENSITIVITY_2G * EARTH_GRAVITY;
 
     // Compute RMS acceleration
-    *rms = sqrt(((*x_ms)*(*x_ms) + (*y_ms)*(*y_ms) + (*z_ms)*(*z_ms))/3);  //adjusted RMS based on m/s^2
+    *rms = sqrt(((x_ms)*(x_ms) + (y_ms)*(y_ms) + (z_ms)*(z_ms))/3);  //adjusted RMS based on m/s^2
 
 }
 
 
 void print_continuous(){
-    float acc_x;
-    float acc_y;
-    float acc_z;
     float rms;
     int piezo;
 
@@ -270,22 +291,18 @@ void print_continuous(){
         piezo = adc_read();
 
         //get x, y, z, and rms acceleration
-        get_xyz_rms(&acc_x, &acc_y, &acc_z, &rms);
+        get_rms(&rms);
 
-        
         //printf("%.2f,%d\n", rms, piezo);
         printf("%.2f\n", rms);
         
         //delay for ADC to work properly
-        sleep_ms(1);
+        sleep_ms(ADC_DELAY);
     }
 
 }
 
 void print_max_every_5(){
-    float acc_x;
-    float acc_y;
-    float acc_z;
     float rms;
     float max_rms = -100;
     int piezo;
@@ -308,13 +325,13 @@ void print_max_every_5(){
         }
 
         //get x, y, z, and rms acceleration
-        get_xyz_rms(&acc_x, &acc_y, &acc_z, &rms);
+        get_rms(&rms);
         if(rms > max_rms){
             max_rms = rms;
         }
         
         //delay for ADC to work properly
-        sleep_ms(1);
+        sleep_ms(ADC_DELAY);
     }
 
     //printf("%.2f,%d\n", max_rms, max_piezo);
@@ -322,10 +339,7 @@ void print_max_every_5(){
 }
 
 
-void print_above_threshold(){
-    float acc_x;
-    float acc_y;
-    float acc_z;
+void sample_above_threshold(){
     float rms;
     int piezo;
 
@@ -334,7 +348,7 @@ void print_above_threshold(){
         piezo = adc_read();
 
         //get x, y, z, and rms acceleration
-        get_xyz_rms(&acc_x, &acc_y, &acc_z, &rms);
+        get_rms(&rms);
 
         if(rms >= RMS_SENSITIVITY){
             //turn on lights to inidicate reading data
@@ -346,13 +360,13 @@ void print_above_threshold(){
                 piezo = adc_read();
 
                 //get x, y, z, and rms acceleration
-                get_xyz_rms(&acc_x, &acc_y, &acc_z, &rms);
+                get_rms(&rms);
 
                 //printf("%.2f,%d\n", rms, piezo);
                 printf("%.2f\n", rms);
 
                 //delay for ADC to work properly
-                sleep_ms(1);
+                sleep_ms(ADC_DELAY);
             }
         }
         else{
@@ -362,15 +376,12 @@ void print_above_threshold(){
         }
 
         //delay for ADC to work properly
-        sleep_ms(1);
+        sleep_ms(ADC_DELAY);
     }
 }
 
 
-void print_sig_diff(){
-    float acc_x;
-    float acc_y;
-    float acc_z;
+void sample_above_thresh_with_settle(){
     float rms;
     int piezo;
 
@@ -379,7 +390,7 @@ void print_sig_diff(){
         piezo = adc_read();
 
         //get x, y, z, and rms acceleration
-        get_xyz_rms(&acc_x, &acc_y, &acc_z, &rms);
+        get_rms(&rms);
 
         if(rms >= RMS_SENSITIVITY){
             //turn on lights to inidicate reading data
@@ -391,16 +402,16 @@ void print_sig_diff(){
                 piezo = adc_read();
 
                 //get x, y, z, and rms acceleration
-                get_xyz_rms(&acc_x, &acc_y, &acc_z, &rms);
+                get_rms(&rms);
 
                 //printf("%.2f,%d\n", rms, piezo);
                 printf("%.2f\n", rms);
 
                 //delay for ADC to work properly
-                sleep_ms(2);
+                sleep_ms(ADC_DELAY);
             }
 
-            wait_for_silence();
+            wait_for_settle();
 
             //turn off lights to indicate done reading data
             pixels.fill(WHITE);
@@ -408,23 +419,20 @@ void print_sig_diff(){
         }
 
         //delay for ADC to work properly
-        sleep_ms(2);
-
+        sleep_ms(ADC_DELAY);
     }
 }
 
 
-void wait_for_silence(){
-    float acc_x;
-    float acc_y;
-    float acc_z;
+void wait_for_settle(){
     const int COMPARISON_SIZE = 50;
     float rms_arr[COMPARISON_SIZE];
     int idx = COMPARISON_SIZE - 1;
     float min_rms;
     float max_rms;
-    const float MOVEMENT_THRESHOLD = 1;
-    const int ADC_DELAY = 2;
+    const float MOVEMENT_THRESHOLD = 2;
+    uint32_t start_time = time_us_32();
+    uint32_t time_to_settle;
     
     //turn lights yellow to signify waiting for silence
     pixels.fill(YELLOW);
@@ -433,7 +441,7 @@ void wait_for_silence(){
     //fill array with data
     for(int i=0; i<COMPARISON_SIZE-1; i++){ 
         //get x, y, z, and rms acceleration
-        get_xyz_rms(&acc_x, &acc_y, &acc_z, &(rms_arr[i]));
+        get_rms(&(rms_arr[i]));
 
         //delay for ADC to work properly
         sleep_ms(ADC_DELAY);
@@ -441,11 +449,12 @@ void wait_for_silence(){
 
     while(1){
         //get x, y, z, and rms acceleration
-        get_xyz_rms(&acc_x, &acc_y, &acc_z, &(rms_arr[idx]));
+        get_rms(&(rms_arr[idx]));
 
         //delay for ADC to work properly
         sleep_ms(ADC_DELAY);
 
+        //find max and min of last COMPARISON_SIZE data points
         min_rms = 1000;
         max_rms = -1000;
         for(int i=0; i<COMPARISON_SIZE; i++){
@@ -461,12 +470,101 @@ void wait_for_silence(){
 
         //check if the movement flatlined
         if(max_rms - min_rms < MOVEMENT_THRESHOLD){
-
-            //printf("clear\n\n");
+            time_to_settle = time_us_32() - start_time;
+            //printf("Time to settle: %u ms\n", time_to_settle/1000);
             return;
         }
 
         //update index in array
         idx = (idx + 1) % COMPARISON_SIZE;
     }
+}
+
+
+void sample_at_movement_with_settle(){
+    float rms;
+    int piezo;
+
+    while(1){
+        //returns when movement is detected
+        wait_for_movement();
+
+        //turn on lights to inidicate reading data
+        pixels.fill(RED);
+        pixels.show();
+
+        for(int i=0; i<SAMPLE_SIZE; i++){
+            // read analog value from piezo
+            piezo = adc_read();
+
+            //get x, y, z, and rms acceleration
+            get_rms(&rms);
+
+            //printf("%.2f,%d\n", rms, piezo);
+            printf("%.2f\n", rms);
+
+            //delay for ADC to work properly
+            sleep_ms(ADC_DELAY);
+        }
+
+        wait_for_settle();
+
+        //turn off lights to indicate done reading data
+        pixels.fill(WHITE);
+        pixels.show();
+
+        //delay for ADC to work properly
+        sleep_ms(ADC_DELAY);
+
+    }
+}
+
+
+void wait_for_movement(){
+    const int COMPARISON_SIZE = 50;
+    float rms_arr[COMPARISON_SIZE];
+    int idx = COMPARISON_SIZE - 1;
+    float min_rms;
+    float max_rms;
+    const float MOVEMENT_THRESHOLD = 2;
+
+    //fill array with data
+    for(int i=0; i<COMPARISON_SIZE-1; i++){ 
+        //get x, y, z, and rms acceleration
+        get_rms(&(rms_arr[i]));
+
+        //delay for ADC to work properly
+        sleep_ms(ADC_DELAY);
+    }
+
+    while(1){
+        //get x, y, z, and rms acceleration
+        get_rms(&(rms_arr[idx]));
+
+        //delay for ADC to work properly
+        sleep_ms(ADC_DELAY);
+
+        //find max and min of last COMPARISON_SIZE data points
+        min_rms = 1000;
+        max_rms = -1000;
+        for(int i=0; i<COMPARISON_SIZE; i++){
+            if(rms_arr[i] > max_rms){
+                max_rms = rms_arr[i];
+            }
+            if(rms_arr[i] < min_rms){
+                min_rms = rms_arr[i];
+            }
+        }
+
+        //printf("\nmax: %.2f min: %.2f diff: %.2f\n", max_rms, min_rms, max_rms-min_rms);
+
+        //check if the movement detected
+        if(max_rms - min_rms > MOVEMENT_THRESHOLD){
+            return;
+        }
+
+        //update index in array
+        idx = (idx + 1) % COMPARISON_SIZE;
+    }
+
 }
