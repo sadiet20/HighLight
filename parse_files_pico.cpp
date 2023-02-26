@@ -16,7 +16,7 @@
 
 using namespace std;
 
-#define SAMPLE_SIZE 120    //may change this 
+#define SAMPLE_SIZE 350    //may change this 
 #define RMS_IDX     0
 #define PIEZO_IDX   1
 
@@ -25,7 +25,7 @@ int verify_keys_file(ifstream&);
 int verify_data_file(ifstream&);
 void write_to_file(ofstream&, vector< vector<float> >&);
 void get_keys(ifstream&, vector<char>&);
-void print_vector(vector<char>);
+void print_keys(vector<char>);
 int get_sample(ifstream&, vector< vector<float> >&);
 
 
@@ -58,7 +58,7 @@ int main(int argc, char** argv){
 		
 		//if reading in a bunch of files, update the name
 		if(argc==2){
-			data_name = "data" + to_string(file) + ".txt";
+			data_name = "data" + to_string(file) + ".csv";
 			keys_name = "keys" + to_string(file) + ".txt";
 		}
 
@@ -89,8 +89,8 @@ int main(int argc, char** argv){
 		}
         
         //read two header lines
-        getline(fin_data, line);
-        getline(fin_data, line);
+        getline(fin_data, line);    //Putty header
+        //getline(fin_data, line);    //rms, piezo
 
         vector<char> keys(num_samples, 'x');
         vector< vector<float> > sample(SAMPLE_SIZE, vector<float>(2, 0));
@@ -104,7 +104,7 @@ int main(int argc, char** argv){
         
         get_keys(fin_keys, keys);
         cout << "Keys: ";
-        print_vector(keys);
+        print_keys(keys);
 
         for(int s=0; s<num_samples; s++){
             id = get_sample(fin_data, sample);
@@ -157,6 +157,12 @@ int verify_keys_file(ifstream& fin_keys){
     int num;
     size_t space_idx;
 
+    char first = fin_keys.peek();
+    if(first == '/'){
+        getline(fin_keys, line);
+        cout << line << endl;
+    }
+
     while(getline(fin_keys, line)){
         if(line[0] == '\n'){
             cout << "\tFile ended in new line" << endl;
@@ -164,9 +170,9 @@ int verify_keys_file(ifstream& fin_keys){
         }   
 
         //verify '#' at beginning of line
-        if(line[0] != '#'){
+        if(line[0] != '#' && line[0] != '-'){
             cout << "\tFailed on line " << i << endl;
-            throw invalid_argument("\tERROR: no '#' found at beginning of line");
+            throw invalid_argument("\tERROR: no '#' or '-' found at beginning of line");
         }
 
         //look for space after the number
@@ -205,8 +211,8 @@ int verify_data_file(ifstream& fin_data){
     string line;
    
     //read two header lines
-    getline(fin_data, line);
-    getline(fin_data, line);
+    getline(fin_data, line);    //Putty header
+    //getline(fin_data, line);    //rms, piezo
 
     while(!fin_data.eof()){
         //loop through each line in the sample
@@ -261,6 +267,11 @@ void get_keys(ifstream& fin_keys, vector<char>& keys){
     string line;
     size_t space_idx;
     int num;
+    
+    char first = fin_keys.peek();
+    if(first == '/'){
+        getline(fin_keys, line);
+    }
 
     while(getline(fin_keys, line)){
         if(line[0] == '\n'){
@@ -282,11 +293,18 @@ void get_keys(ifstream& fin_keys, vector<char>& keys){
 
 
 //print contents of char vector
-void print_vector(vector<char> v){
+void print_keys(vector<char> v){
+    int n=0, p=0, r=0, x=0;
     for(int i=0; i<v.size(); i++){
+        if(v[i] == 'n') n++;
+        if(v[i] == 'p') p++;
+        if(v[i] == 'r') r++;
+        if(v[i] == 'x') x++;
         cout << v[i] << ", ";
     }
     cout << endl;
+
+    cout << "\tNet shots: " << n << "\n\tPocket shots: " << p << "\n\tRim shots: " << r << "\n\tTrash shots: " << x << "\n\tTotal valid shots: " << n+p+r << endl;
 }
 
 
